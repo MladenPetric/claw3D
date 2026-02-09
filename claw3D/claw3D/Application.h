@@ -1,5 +1,8 @@
 #pragma once
 
+#include "Window.h"
+#include "Shader.h"
+
 class Application
 {
 public:
@@ -15,4 +18,10 @@ private:
     void shutdown();
 
     bool m_running;
+    // === PROZOR ===
+    Window m_window;
+    // === OpenGL test (trougao) ===
+    unsigned int VAO = 0;
+    unsigned int VBO = 0;
+    Shader* shader = nullptr;
 };
