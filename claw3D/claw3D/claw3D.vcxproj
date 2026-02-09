@@ -102,7 +102,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>C:\Users\Uros\Downloads\glfw-3.4.bin.WIN64\glfw-3.4.bin.WIN64\include;$(ProjectDir)external\glad\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Users\Uros\Downloads\glfw-3.4.bin.WIN64\glfw-3.4.bin.WIN64\include;$(ProjectDir)external\glm;$(ProjectDir)external\glad\include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -127,8 +127,10 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Application.cpp" />
+    <ClCompile Include="Camera.cpp" />
     <ClCompile Include="external\glad\src\glad.c" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="Mesh.cpp" />
     <ClCompile Include="Shader.cpp" />
     <ClCompile Include="Window.cpp" />
   </ItemGroup>
@@ -136,12 +138,14 @@
     <ClInclude Include="..\..\..\..\..\Downloads\glad\include\glad\glad.h" />
     <ClInclude Include="..\..\..\..\..\Downloads\glad\include\KHR\khrplatform.h" />
     <ClInclude Include="Application.h" />
+    <ClInclude Include="Camera.h" />
+    <ClInclude Include="Mesh.h" />
     <ClInclude Include="Shader.h" />
     <ClInclude Include="Window.h" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="basic.frag" />
-    <None Include="basic.vert" />
+    <None Include="shaders\basic.frag" />
+    <None Include="shaders\basic.vert" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

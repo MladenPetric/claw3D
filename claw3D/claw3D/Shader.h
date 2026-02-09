@@ -1,17 +1,20 @@
 #pragma once
 #include <string>
+#include <glm/glm.hpp>
 
 class Shader
 {
 public:
-    Shader(const char* vertPath, const char* fragPath);
+    Shader(const std::string& vertexPath, const std::string& fragmentPath);
     ~Shader();
 
     void use() const;
+    void setMat4(const std::string& name, const glm::mat4& value) const;
 
 private:
-    unsigned int m_id;
-    unsigned int compile(unsigned int type, const std::string& src);
-    std::string loadFile(const char* path);
-};
+    unsigned int m_ID;
 
+private:
+    static std::string loadFile(const std::string& path);
+    static unsigned int compile(unsigned int type, const std::string& src);
+};

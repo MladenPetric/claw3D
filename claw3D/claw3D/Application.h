@@ -1,8 +1,7 @@
-#pragma once
-
 #include "Window.h"
 #include "Shader.h"
-
+#include "Camera.h"
+#include "Mesh.h"
 class Application
 {
 public:
@@ -17,11 +16,18 @@ private:
     void render();
     void shutdown();
 
+    /*void initTriangle();*/
+    void drawScene();
+
+private:
     bool m_running;
-    // === PROZOR ===
     Window m_window;
-    // === OpenGL test (trougao) ===
-    unsigned int VAO = 0;
-    unsigned int VBO = 0;
-    Shader* shader = nullptr;
+
+   /* unsigned int m_VAO = 0;
+    unsigned int m_VBO = 0;*/
+
+    Shader* m_shader = nullptr;
+    Camera* m_camera = nullptr;
+    Mesh* m_cube = nullptr;
+
 };
