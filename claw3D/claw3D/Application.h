@@ -2,6 +2,11 @@
 #include "Shader.h"
 #include "Camera.h"
 #include "Mesh.h"
+#include <vector>
+#include "GameObject.h"
+
+class Scene;
+
 class Application
 {
 public:
@@ -22,12 +27,17 @@ private:
 private:
     bool m_running;
     Window m_window;
-
+    
    /* unsigned int m_VAO = 0;
     unsigned int m_VBO = 0;*/
 
     Shader* m_shader = nullptr;
     Camera* m_camera = nullptr;
-    Mesh* m_cube = nullptr;
+    /*Mesh* m_cube = nullptr;*/
+    std::vector<GameObject> m_objects;
+    Mesh* m_sharedCubeMesh;
+
+
+    Scene* m_scene;
 
 };

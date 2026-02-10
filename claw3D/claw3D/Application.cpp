@@ -7,16 +7,12 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
-Application::Application()
-    : m_running(true)
-{
-}
+#include "Scene.h"
+#include "Mesh.h"
+#include "Shader.h"
+#include "Camera.h"
 
-Application::~Application()
-{
-    shutdown();
-}
-
+// === Shared cube geometry ===
 static float cubeVertices[] = {
     // front
     -0.5f,-0.5f, 0.5f,  0.5f,-0.5f, 0.5f,  0.5f, 0.5f, 0.5f,
@@ -43,6 +39,15 @@ static float cubeVertices[] = {
          0.5f,-0.5f, 0.5f, -0.5f,-0.5f,-0.5f,  0.5f,-0.5f,-0.5f
 };
 
+Application::Application()
+    : m_running(true)
+{
+}
+
+Application::~Application()
+{
+    shutdown();
+}
 
 void Application::run()
 {
@@ -53,11 +58,11 @@ void Application::run()
 
     while (m_running && !m_window.shouldClose())
     {
-        auto currentTime = clock::now();
-        std::chrono::duration<float> delta = currentTime - lastTime;
-        lastTime = currentTime;
+        auto now = clock::now();
+        std::chrono::duration<float> dt = now - lastTime;
+        lastTime = now;
 
-        update(delta.count());
+        update(dt.count());
         render();
 
         m_window.swapBuffers();
@@ -77,52 +82,40 @@ void Application::init()
 
     m_shader = new Shader("shaders/basic.vert", "shaders/basic.frag");
     m_camera = new Camera(60.0f, 1280.0f / 720.0f, 0.1f, 100.0f);
-    m_cube = new Mesh(cubeVertices, 36);
 
-    /*initTriangle();*/
+    m_scene = new Scene();
+
+    // jedan shared mesh za sve kocke
+    Mesh* cubeMesh = new Mesh(cubeVertices, 36);
+
+    // === BASE ===
+    {
+        glm::mat4 model = glm::mat4(1.0f);
+        model = glm::scale(model, { 2.0f, 1.0f, 2.0f });
+        model = glm::translate(model, { 0.0f, -0.5f, 0.0f });
+        m_scene->addObject(cubeMesh, model);
+    }
+
+    // === GLASS ===
+    {
+        glm::mat4 model = glm::mat4(1.0f);
+        model = glm::scale(model, { 2.0f, 2.0f, 2.0f });
+        model = glm::translate(model, { 0.0f, 0.5f, 0.0f });
+        m_scene->addObject(cubeMesh, model);
+    }
+
+    // === CLAW ===
+    {
+        glm::mat4 model = glm::mat4(1.0f);
+        model = glm::scale(model, { 0.2f, 1.0f, 0.2f });
+        model = glm::translate(model, { 0.0f, 1.5f, 0.0f });
+        m_scene->addObject(cubeMesh, model);
+    }
 }
 
-//void Application::initTriangle()
-//{
-//    float vertices[] = {
-//         0.0f,  0.5f, 0.0f,
-//        -0.5f, -0.5f, 0.0f,
-//         0.5f, -0.5f, 0.0f
-//    };
-//
-//    glGenVertexArrays(1, &m_VAO);
-//    glGenBuffers(1, &m_VBO);
-//
-//    glBindVertexArray(m_VAO);
-//
-//    glBindBuffer(GL_ARRAY_BUFFER, m_VBO);
-//    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-//
-//    glVertexAttribPointer(
-//        0, 3, GL_FLOAT, GL_FALSE,
-//        3 * sizeof(float), (void*)0
-//    );
-//    glEnableVertexAttribArray(0);
-//
-//    glBindVertexArray(0);
-//}
-void Application::drawScene()
+void Application::update(float dt)
 {
-    glm::mat4 model = glm::mat4(1.0f);
-    glm::mat4 mvp =
-        m_camera->getProjection() *
-        m_camera->getView() *
-        model;
-
-    m_shader->use();
-    m_shader->setMat4("u_MVP", mvp);
-
-    m_cube->draw();
-}
-
-
-void Application::update(float)
-{
+    m_scene->update(dt);
 }
 
 void Application::render()
@@ -130,23 +123,19 @@ void Application::render()
     glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    drawScene();
+    m_scene->draw(*m_shader, *m_camera);
 }
 
 void Application::shutdown()
 {
-    /*if (m_VBO) glDeleteBuffers(1, &m_VBO);
-    if (m_VAO) glDeleteVertexArrays(1, &m_VAO);*/
-
-    delete m_shader;
-    m_shader = nullptr;
+    delete m_scene;
+    m_scene = nullptr;
 
     delete m_camera;
     m_camera = nullptr;
 
-    delete m_cube;
-    m_cube = nullptr;
-
+    delete m_shader;
+    m_shader = nullptr;
 
     std::cout << "Application shutdown\n";
 }
