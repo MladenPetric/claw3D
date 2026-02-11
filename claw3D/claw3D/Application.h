@@ -41,4 +41,10 @@ private:
     float m_dropSpeed = 2.0f;
     bool m_dropping = false;
 
+    Shader* m_watermarkShader = nullptr;
+
+    unsigned int m_watermarkVAO = 0;
+    unsigned int m_watermarkVBO = 0;
+    unsigned int m_watermarkTexture = 0;
+
 };
