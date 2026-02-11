@@ -1,10 +1,12 @@
+#pragma once
 #include "Window.h"
-#include "Shader.h"
-#include "Camera.h"
-#include "Mesh.h"
 #include <vector>
 #include "GameObject.h"
+#include <glm/glm.hpp>
 
+class Shader;
+class Camera;
+class Mesh;
 class Scene;
 
 class Application
@@ -21,23 +23,22 @@ private:
     void render();
     void shutdown();
 
-    /*void initTriangle();*/
-    void drawScene();
-
 private:
-    bool m_running;
+    bool m_running = true;
     Window m_window;
-    
-   /* unsigned int m_VAO = 0;
-    unsigned int m_VBO = 0;*/
 
     Shader* m_shader = nullptr;
     Camera* m_camera = nullptr;
-    /*Mesh* m_cube = nullptr;*/
-    std::vector<GameObject> m_objects;
-    Mesh* m_sharedCubeMesh;
+    Scene* m_scene = nullptr;
 
+    Mesh* m_cubeMesh = nullptr; // da ne curi memorija
 
-    Scene* m_scene;
+    glm::vec3 m_lightPos{ 2.5f, 3.0f, 2.0f };
+    glm::vec3 m_lightColor{ 1.0f, 1.0f, 1.0f };
+
+    GameObject* m_clawRoot = nullptr;
+    float m_clawSpeed = 2.0f;
+    float m_dropSpeed = 2.0f;
+    bool m_dropping = false;
 
 };
