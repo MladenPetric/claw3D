@@ -3,7 +3,7 @@
 #include <iostream>
 #include <chrono>
 
-#include <glad/glad.h>
+//#include <glad/glad.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -85,38 +85,34 @@ void Application::init()
 
     m_scene = new Scene();
 
-    // jedan shared mesh za sve kocke
     Mesh* cubeMesh = new Mesh(cubeVertices, 36);
 
-    // === BASE ===
-    {
-        glm::mat4 model = glm::mat4(1.0f);
-        model = glm::scale(model, { 2.0f, 1.0f, 2.0f });
-        model = glm::translate(model, { 0.0f, -0.5f, 0.0f });
-        m_scene->addObject(cubeMesh, model);
-    }
+    // BASE
+    GameObject base(cubeMesh);
+    base.transform.scale = { 2.0f, 1.0f, 2.0f };
+    base.transform.position = { 0.0f, -0.5f, 0.0f };
+    m_scene->addObject(base);
 
-    // === GLASS ===
-    {
-        glm::mat4 model = glm::mat4(1.0f);
-        model = glm::scale(model, { 2.0f, 2.0f, 2.0f });
-        model = glm::translate(model, { 0.0f, 0.5f, 0.0f });
-        m_scene->addObject(cubeMesh, model);
-    }
+    // GLASS
+    GameObject glass(cubeMesh);
+    glass.transform.scale = { 2.0f, 2.0f, 2.0f };
+    glass.transform.position = { 0.0f, 0.5f, 0.0f };
+    m_scene->addObject(glass);
 
-    // === CLAW ===
-    {
-        glm::mat4 model = glm::mat4(1.0f);
-        model = glm::scale(model, { 0.2f, 1.0f, 0.2f });
-        model = glm::translate(model, { 0.0f, 1.5f, 0.0f });
-        m_scene->addObject(cubeMesh, model);
-    }
+    // CLAW
+    GameObject claw(cubeMesh);
+    claw.transform.scale = { 0.2f, 1.0f, 0.2f };
+    claw.transform.position = { 0.0f, 1.5f, 0.0f };
+    m_scene->addObject(claw);
 }
 
 void Application::update(float dt)
 {
+    m_camera->processInput(m_window.getHandle(), dt);
     m_scene->update(dt);
 }
+
+
 
 void Application::render()
 {

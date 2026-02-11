@@ -1,28 +1,21 @@
 #pragma once
 
 #include <vector>
-#include <glm/glm.hpp>
+#include "GameObject.h"
 
 class Shader;
 class Camera;
-class Mesh;
-
-struct SceneObject
-{
-    Mesh* mesh;
-    glm::mat4 model;
-};
 
 class Scene
 {
 public:
-    Scene();
-    ~Scene();
+    Scene() = default;
+    ~Scene() = default;
 
-    void addObject(Mesh* mesh, const glm::mat4& transform);
+    void addObject(const GameObject& object);
     void update(float dt);
     void draw(const Shader& shader, const Camera& camera);
 
 private:
-    std::vector<SceneObject> m_objects;
+    std::vector<GameObject> m_objects;
 };

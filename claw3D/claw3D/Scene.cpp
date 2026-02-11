@@ -1,33 +1,19 @@
 #include "Scene.h"
-#include "Mesh.h"
 #include "Shader.h"
 #include "Camera.h"
 
-Scene::Scene() {}
-Scene::~Scene() {}
-
-void Scene::addObject(Mesh* mesh, const glm::mat4& transform)
+void Scene::addObject(const GameObject& object)
 {
-    m_objects.push_back({ mesh, transform });
+    m_objects.push_back(object);
 }
 
 void Scene::update(float)
 {
-    // kasnije: animacije, logika, kretanja
+    // kasnije animacije
 }
 
 void Scene::draw(const Shader& shader, const Camera& camera)
 {
-    shader.use();
-
     for (auto& obj : m_objects)
-    {
-        glm::mat4 mvp =
-            camera.getProjection() *
-            camera.getView() *
-            obj.model;
-
-        shader.setMat4("u_MVP", mvp);
-        obj.mesh->draw();
-    }
+        obj.draw(shader, camera);
 }
