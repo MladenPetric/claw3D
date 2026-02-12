@@ -21,4 +21,7 @@ public:
 
 private:
     std::vector<std::unique_ptr<GameObject>> m_objects;
+    Mesh* bearMesh = nullptr;
+    GameObject* bearObject = nullptr;
+
 };

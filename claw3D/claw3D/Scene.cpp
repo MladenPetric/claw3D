@@ -3,6 +3,8 @@
 #include "Shader.h"
 #include "Camera.h"
 
+//#include <glad/glad.h>
+
 GameObject* Scene::createObject(Mesh* mesh, const std::string& name)
 {
     m_objects.push_back(std::make_unique<GameObject>(mesh, name));

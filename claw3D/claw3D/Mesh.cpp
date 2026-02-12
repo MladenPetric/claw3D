@@ -48,3 +48,4 @@ void Mesh::draw() const
     glDrawArrays(GL_TRIANGLES, 0, m_vertexCount);
     glBindVertexArray(0);
 }
+

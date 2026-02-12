@@ -37,6 +37,5 @@ void GameObject::draw(const Shader& shader, const Camera& camera) const
     shader.setMat4("u_Projection", proj);
 
     shader.setVec3("u_ObjectColor", color);
-
     m_mesh->draw();
 }

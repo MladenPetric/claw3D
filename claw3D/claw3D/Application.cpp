@@ -6,6 +6,7 @@
 #include <glad/glad.h>
 #include <glm/glm.hpp>
 #include <glm/common.hpp>
+#include <glm/gtc/constants.hpp>
 
 #include "Scene.h"
 #include "Mesh.h"
@@ -14,44 +15,9 @@
 #include "GameObject.h"
 #include "stb_image.h"
 #include "Util.h"
+#include <thread>
 
-//unsigned int loadTexture(const char* path)
-//{
-//    unsigned int textureID;
-//    glGenTextures(1, &textureID);
-//
-//    int width, height, channels;
-//    stbi_set_flip_vertically_on_load(true);
-//    unsigned char* data = stbi_load(path, &width, &height, &channels, 0);
-//
-//    if (data)
-//    {
-//        GLenum format = GL_RGB;
-//        if (channels == 1) format = GL_RED;
-//        if (channels == 3) format = GL_RGB;
-//        if (channels == 4) format = GL_RGBA;
-//
-//        glBindTexture(GL_TEXTURE_2D, textureID);
-//        glTexImage2D(GL_TEXTURE_2D, 0, format,
-//                     width, height, 0,
-//                     format, GL_UNSIGNED_BYTE, data);
-//        glGenerateMipmap(GL_TEXTURE_2D);
-//
-//        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-//        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-//        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-//        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-//
-//        stbi_image_free(data);
-//    }
-//    else
-//    {
-//        std::cout << "Failed to load texture: " << path << std::endl;
-//        stbi_image_free(data);
-//    }
-//
-//    return textureID;
-//}
+#include <vector>
 
 
 // === Shared cube geometry ===
@@ -106,6 +72,48 @@ static float cubeVertices[] = {
       0.5f,-0.5f,-0.5f,   0,-1,0,
 };
 
+// === Simple UV-less sphere (triangles) ===
+static std::vector<float> buildSphereVertices(int stacks, int slices)
+{
+    // vertices: pos(3) + normal(3)
+    std::vector<float> v;
+    v.reserve(stacks * slices * 6 * 6);
+
+    auto push = [&](const glm::vec3& p)
+        {
+            glm::vec3 n = glm::normalize(p);
+            v.push_back(p.x); v.push_back(p.y); v.push_back(p.z);
+            v.push_back(n.x); v.push_back(n.y); v.push_back(n.z);
+        };
+
+    for (int i = 0; i < stacks; ++i)
+    {
+        float v0 = (float)i / (float)stacks;
+        float v1 = (float)(i + 1) / (float)stacks;
+        float phi0 = glm::pi<float>() * (v0 - 0.5f);
+        float phi1 = glm::pi<float>() * (v1 - 0.5f);
+
+        for (int j = 0; j < slices; ++j)
+        {
+            float u0 = (float)j / (float)slices;
+            float u1 = (float)(j + 1) / (float)slices;
+            float th0 = glm::two_pi<float>() * u0;
+            float th1 = glm::two_pi<float>() * u1;
+
+            glm::vec3 p00 = { cos(phi0) * cos(th0), sin(phi0), cos(phi0) * sin(th0) };
+            glm::vec3 p10 = { cos(phi1) * cos(th0), sin(phi1), cos(phi1) * sin(th0) };
+            glm::vec3 p01 = { cos(phi0) * cos(th1), sin(phi0), cos(phi0) * sin(th1) };
+            glm::vec3 p11 = { cos(phi1) * cos(th1), sin(phi1), cos(phi1) * sin(th1) };
+
+            // 2 triangles
+            push(p00); push(p10); push(p11);
+            push(p00); push(p11); push(p01);
+        }
+    }
+
+    return v;
+}
+
 Application::Application() = default;
 
 Application::~Application()
@@ -120,19 +128,33 @@ void Application::run()
     using clock = std::chrono::high_resolution_clock;
     auto lastTime = clock::now();
 
+    const float targetFrameTime = 1.0f / 75.0f;
+
     while (m_running && !m_window.shouldClose())
     {
-        auto now = clock::now();
-        std::chrono::duration<float> dt = now - lastTime;
-        lastTime = now;
+        auto frameStart = clock::now();
+        std::chrono::duration<float> dt = frameStart - lastTime;
+        lastTime = frameStart;
 
         update(dt.count());
         render();
 
         m_window.swapBuffers();
         m_window.pollEvents();
+
+        // FRAME LIMITER
+        auto frameEnd = clock::now();
+        std::chrono::duration<float> frameTime = frameEnd - frameStart;
+
+        if (frameTime.count() < targetFrameTime)
+        {
+            std::this_thread::sleep_for(
+                std::chrono::duration<float>(targetFrameTime - frameTime.count())
+            );
+        }
     }
 }
+
 
 void Application::init()
 {
@@ -150,23 +172,119 @@ void Application::init()
 
     m_cubeMesh = new Mesh(cubeVertices, 36);
 
+    // Sphere mesh (lamp)
+    {
+        auto sphere = buildSphereVertices(18, 24);
+        m_sphereMesh = new Mesh(sphere.data(), (unsigned int)(sphere.size() / 6));
+    }
+
     // =====================
 // 1. GLAVNA MASIVNA BAZA
 // =====================
-    auto* baseMain = m_scene->createObject(m_cubeMesh, "BaseMain");
-    baseMain->transform.scale = { 4.0f, 1.8f, 4.5f };
+    float baseWidth = 4.0f;
+    float baseHeight = 1.8f;
+    float baseDepth = 4.5f;
 
-    baseMain->transform.position = { 0.0f, -1.5f, 0.0f };
-    baseMain->color = { 0.2f, 0.2f, 0.2f };
+    float holeWidth = 1.2f;
+    float holeHeight = 0.9f;
+    float wallThickness = 0.3f;
+
+    // LEVA STRANA
+    auto* baseLeft = m_scene->createObject(m_cubeMesh, "BaseLeft");
+    baseLeft->transform.scale = { (baseWidth - holeWidth) / 2.0f, baseHeight, baseDepth };
+    baseLeft->transform.position = { -((holeWidth + baseWidth) / 4.0f), -1.5f, 0.0f };
+    baseLeft->color = { 0.2f, 0.2f, 0.2f };
+
+    // DESNA STRANA
+    auto* baseRight = m_scene->createObject(m_cubeMesh, "BaseRight");
+    baseRight->transform.scale = { (baseWidth - holeWidth) / 2.0f, baseHeight, baseDepth };
+    baseRight->transform.position = { ((holeWidth + baseWidth) / 4.0f), -1.5f, 0.0f };
+    baseRight->color = { 0.2f, 0.2f, 0.2f };
+
+    float upperPartHeight = baseHeight - holeHeight;
+    float upperCenterY = -1.5f + holeHeight / 2.0f;
+
+    // LEVI GORNJI DEO (pod u staklu - levo od rupe)
+    auto* upperLeft = m_scene->createObject(m_cubeMesh, "UpperLeft");
+    upperLeft->transform.scale = {
+        (baseWidth - holeWidth) / 2.0f,
+        upperPartHeight,
+        baseDepth
+    };
+    upperLeft->transform.position = {
+        -((holeWidth + baseWidth) / 4.0f),
+        upperCenterY,
+        0.0f
+    };
+    upperLeft->color = { 0.2f, 0.2f, 0.2f };
+
+    // DESNI GORNJI DEO
+    auto* upperRight = m_scene->createObject(m_cubeMesh, "UpperRight");
+    upperRight->transform.scale = {
+        (baseWidth - holeWidth) / 2.0f,
+        upperPartHeight,
+        baseDepth
+    };
+    upperRight->transform.position = {
+        ((holeWidth + baseWidth) / 4.0f),
+        upperCenterY,
+        0.0f
+    };
+    upperRight->color = { 0.2f, 0.2f, 0.2f };
+
+    // ZADNJI GORNJI DEO (iza rupe)
+    auto* upperBack = m_scene->createObject(m_cubeMesh, "UpperBack");
+    upperBack->transform.scale = {
+        holeWidth,
+        upperPartHeight,
+        (baseDepth - holeWidth)
+    };
+    upperBack->transform.position = {
+        0.0f,
+        upperCenterY,
+        -((holeWidth) / 2.0f)
+    };
+    upperBack->color = { 0.2f, 0.2f, 0.2f };
+
+
+    // DONJA IVICA RUPE
+    auto* baseBottomEdge = m_scene->createObject(m_cubeMesh, "BaseBottomEdge");
+    baseBottomEdge->transform.scale = { holeWidth, holeHeight / 5.0f, baseDepth };
+    baseBottomEdge->transform.position = { 0.0f, -1.85f - holeHeight / 2.0f, 0.0f };
+    baseBottomEdge->color = { 0.2f, 0.2f, 0.2f };
+
+    // =====================
+// UNUTRAŠNJA PREGRADA (DA SE NE VIDI SPOJ RUPE)
+// =====================
+
+    float partitionThickness = 0.05f;
+    float partitionHeight = baseHeight * 0.3f;   // skoro cela visina baze
+
+    auto* innerPartition = m_scene->createObject(m_cubeMesh, "InnerPartition");
+    innerPartition->transform.scale = { holeWidth, partitionHeight, partitionThickness };
+
+    // malo uvučeno od prednje strane baze
+    innerPartition->transform.position = {
+        0.0f,
+        -0.85f,
+        baseDepth / 2.0f
+    };
+
+    innerPartition->color = { 0.15f, 0.15f, 0.15f };
 
 
     // GLASS
     auto* glass = m_scene->createObject(m_cubeMesh, "Glass");
     glass->transparent = true;
-    glass->transform.scale = { 3.2f, 3.0f, 3.2f };
-    glass->transform.position = { 0.0f, 1.2f, -0.3f };
-
+    glass->transform.scale = { 4.0f, 3.0f, 4.5f };
+    glass->transform.position = { 0.0f, 0.9f, 0.0f };
     glass->color = { 0.8f, 0.9f, 1.0f };
+
+    // LAMP (iznad stakla)
+    m_lamp = m_scene->createObject(m_sphereMesh, "Lamp");
+    m_lamp->transform.scale = { 0.25f, 0.25f, 0.25f };
+    m_lamp->transform.position = { 0.0f, 2.85f, 0.0f };
+    m_lamp->color = { 0.0f, 0.0f, 0.0f };
 
     // CLAW ROOT
     auto* clawRoot = m_scene->createObject(nullptr, "ClawRoot");
@@ -177,30 +295,48 @@ void Application::init()
     // VERTICAL ROD
     auto* verticalRod = m_scene->createObject(m_cubeMesh, "VerticalRod");
     verticalRod->transform.scale = { 0.1f, 1.0f, 0.1f };
-    verticalRod->transform.position = { 0.0f, -0.5f, 0.0f };
+    verticalRod->transform.position = { 0.0f, -0.6f, 0.0f };
     verticalRod->color = { 0.2f, 0.2f, 0.2f };
     clawRoot->addChild(verticalRod);
 
-    // CLAW HEAD
     auto* clawHead = m_scene->createObject(m_cubeMesh, "ClawHead");
-    clawHead->transform.scale = { 0.3f, 0.2f, 0.3f };
-    clawHead->transform.position = { 0.0f, -1.0f, 0.0f };
-    clawHead->color = { 0.8f, 0.2f, 0.2f };
+    clawHead->transform.scale = { 0.2f, 0.2f, 0.2f };
+    clawHead->transform.position = { 0.0f, -0.6f, 0.0f };
+    clawHead->color = { 0.6f, 0.6f, 0.6f };
     verticalRod->addChild(clawHead);
 
+
     // FINGERS
+    float fingerLength = 1.5f;
+    float fingerThickness = 1.0f;
+    float radius = 0.35f;
+
     for (int i = 0; i < 3; i++)
     {
+        float angle = glm::radians(120.0f * i);
+
         auto* finger = m_scene->createObject(m_cubeMesh, "Finger");
-        finger->transform.scale = { 0.1f, 0.4f, 0.1f };
-        finger->transform.position = {
-            (i - 1) * 0.2f,
-            -0.4f,
-            0.2f
+
+        finger->transform.scale = {
+            fingerThickness,
+            fingerLength,
+            fingerThickness
         };
-        finger->color = { 0.9f, 0.9f, 0.9f };
+
+        finger->transform.position = {
+            cos(angle) * radius,
+            -0.4f,
+            sin(angle) * radius
+        };
+
+        finger->transform.rotation.x = -30.0f;   // nagib ka unutra
+        finger->transform.rotation.y = glm::degrees(angle);
+
+        finger->color = { 0.8f, 0.8f, 0.8f };
+
         clawHead->addChild(finger);
     }
+
 
 
     m_clawRoot = clawRoot;
@@ -218,71 +354,44 @@ void Application::init()
         toy->color = { 0.6f + 0.1f * i, 0.3f, 0.2f };
     }
 
-    auto* innerFloor = m_scene->createObject(m_cubeMesh, "InnerFloor");
-    innerFloor->transform.scale = { 3.0f, 0.2f, 3.0f };
-    innerFloor->transform.position = { 0.0f, -0.6f, -0.3f };
-    innerFloor->color = { 0.35f, 0.35f, 0.35f };
-
-    /*auto* dropZone = m_scene->createObject(m_cubeMesh, "DropZone");
-    dropZone->transform.scale = { 0.8f, 0.1f, 0.4f };
-    dropZone->transform.position = { 1.5f, -0.6f, 0.0f };
-    dropZone->color = { 0.1f, 0.1f, 0.1f };*/
-
- /*   auto* floor = m_scene->createObject(m_cubeMesh, "InnerFloor");
-    floor->transform.scale = { 3.8f, 0.2f, 3.8f };
-    floor->transform.position = { 0.0f, -0.8f, 0.0f };
-    floor->color = { 0.3f, 0.3f, 0.3f };*/
-
-    // =====================
-    // 2. PREDNJI PANEL (VERTIKALNA STRANA)
-    // =====================
-    auto* frontPanel = m_scene->createObject(m_cubeMesh, "FrontPanel");
-    frontPanel->transform.scale = { 3.8f, 1.0f, 0.2f };
-    frontPanel->transform.position = { 0.0f, -1.2f, 1.85f };
-    frontPanel->color = { 0.25f, 0.25f, 0.25f };
-
-
     // =====================
     // 4. RUPA ZA ŽETON (NA PREDNJEM PANELU)
     // =====================
     auto* coinSlot = m_scene->createObject(m_cubeMesh, "CoinSlot");
-    coinSlot->transform.scale = { 0.8f, 0.12f, 0.05f };
-    coinSlot->transform.position = { 0.5f, -1.0f, 2.25f };
-    coinSlot->color = { 0.05f, 0.05f, 0.05f };
+    coinSlot->transform.scale = { 0.7f, 0.12f, 0.05f };
+    coinSlot->transform.position = { 1.0f, -1.0f, 2.25f };
+    coinSlot->color = { 0.8f, 0.1f, 0.1f };
+
 
 
     // =====================
-    // 5. POLUGA (NA KONTROLNOJ PLOČI)
-    // =====================
+// 5. POLUGA (IZLAZI IZ PREDNJE STRANE BAZE)
+// =====================
+
+// pozicija prednje strane baze
+    float frontZ = baseDepth / 2.0f;
+
+    // ROD – ide iz baze ka napolje (po Z osi)
     auto* leverRod = m_scene->createObject(m_cubeMesh, "LeverRod");
-    leverRod->transform.scale = { 0.12f, 0.6f, 0.12f };
-    leverRod->transform.position = { 1.6f, -0.9f, 2.1f };
-    leverRod->color = { 0.1f, 0.1f, 0.1f };
+    leverRod->transform.scale = { 0.12f, 0.12f, 0.6f };   // izdužena po Z
+    leverRod->transform.position = {
+        1.6f,           // desna strana
+        -1.2f,          // visina na bazi
+        frontZ + 0.3f   // malo ispred baze
+    };
+    leverRod->color = { 0.15f, 0.15f, 0.15f };
 
+
+    // HEAD – dugme koje je najbliže kameri
     auto* leverHead = m_scene->createObject(m_cubeMesh, "LeverHead");
-    leverHead->transform.scale = { 0.3f, 0.3f, 0.3f };
-    leverHead->transform.position = { 1.6f, -0.5f, 2.1f };
+    leverHead->transform.scale = { 0.35f, 0.35f, 0.35f };
+    leverHead->transform.position = {
+        1.6f,
+        -1.2f,
+        frontZ + 0.65f   // još malo napolje
+    };
     leverHead->color = { 0.9f, 0.1f, 0.1f };
 
-
-
-    // =====================
-    // 6. OTVOR ZA PREUZIMANJE IGRAČKE
-    // =====================
-    auto* dropFrame = m_scene->createObject(m_cubeMesh, "DropFrame");
-    dropFrame->transform.scale = { 1.2f, 0.5f, 0.2f };
-    dropFrame->transform.position = { 0.0f, -2.2f, 2.3f };
-    dropFrame->color = { 0.1f, 0.1f, 0.1f };
-
-    auto* dropInside = m_scene->createObject(m_cubeMesh, "DropInside");
-    dropInside->transform.scale = { 1.0f, 0.4f, 0.6f };
-    dropInside->transform.position = { 0.0f, -2.3f, 1.9f };
-    dropInside->color = { 0.02f, 0.02f, 0.02f };
-
-    /*auto* backWall = m_scene->createObject(m_cubeMesh, "BackWall");
-    backWall->transform.scale = { 3.8f, 3.8f, 0.1f };
-    backWall->transform.position = { 0.0f, 1.5f, -1.9f };
-    backWall->color = { 0.4f, 0.8f, 0.5f };*/
 
 
     // ===== WATERMARK =====
@@ -334,8 +443,67 @@ void Application::update(float dt)
     m_camera->processInput(m_window.getHandle(), dt);
     m_scene->update(dt);
 
+    // ===== LAMP STATE (minimalna implementacija bez collision-a) =====
+    // - LMB: "coin" -> plava (režim igre)
+    // - ENTER: "win" -> blink crveno/zeleno na 0.5s
+    // - BACKSPACE: reset -> ugašena
+    static bool lmbDown = false;
+    static bool enterDown = false;
+    static bool backDown = false;
+
+    if (glfwGetMouseButton(m_window.getHandle(), GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
+    {
+        if (!lmbDown)
+        {
+            lmbDown = true;
+            m_lampMode = LampMode::Blue;
+            m_lampBlinkTimer = 0.0f;
+        }
+    }
+    else lmbDown = false;
+
+    if (glfwGetKey(m_window.getHandle(), GLFW_KEY_ENTER) == GLFW_PRESS)
+    {
+        if (!enterDown)
+        {
+            enterDown = true;
+            m_lampMode = LampMode::WinBlink;
+            m_lampBlinkTimer = 0.0f;
+            m_lampBlinkGreen = true;
+        }
+    }
+    else enterDown = false;
+
+    if (glfwGetKey(m_window.getHandle(), GLFW_KEY_BACKSPACE) == GLFW_PRESS)
+    {
+        if (!backDown)
+        {
+            backDown = true;
+            m_lampMode = LampMode::Off;
+            m_lampBlinkTimer = 0.0f;
+        }
+    }
+    else backDown = false;
+
+    if (m_lampMode == LampMode::WinBlink)
+    {
+        m_lampBlinkTimer += dt;
+        if (m_lampBlinkTimer >= 0.5f)
+        {
+            m_lampBlinkTimer = 0.0f;
+            m_lampBlinkGreen = !m_lampBlinkGreen;
+        }
+    }
+
     float move = m_clawSpeed * dt;
 
+    // gasenje
+    if (glfwGetKey(m_window.getHandle(), GLFW_KEY_ESCAPE) == GLFW_PRESS)
+    {
+        glfwSetWindowShouldClose(m_window.getHandle(), true);
+    }
+
+    // horizontalno kretanje
     if (glfwGetKey(m_window.getHandle(), GLFW_KEY_A) == GLFW_PRESS)
         m_clawRoot->transform.position.x -= move;
 
@@ -349,30 +517,115 @@ void Application::update(float dt)
         m_clawRoot->transform.position.z += move;
 
     // clamp unutar kutije
-    m_clawRoot->transform.position.x = glm::clamp(
-        m_clawRoot->transform.position.x, -1.0f, 1.0f);
+    m_clawRoot->transform.position.x =
+        glm::clamp(m_clawRoot->transform.position.x, -1.5f, 1.5f);
 
-    m_clawRoot->transform.position.z = glm::clamp(
-        m_clawRoot->transform.position.z, -1.0f, 1.0f);
+    m_clawRoot->transform.position.z =
+        glm::clamp(m_clawRoot->transform.position.z, -1.8f, 1.8f);
 
-    // drop logika
+    // ===== DROP LOGIKA =====
+
+    const float startY = 2.5f;   // početna visina
+    const float minY = 1.6f;   // visina blizu poda 
+
+    // pokretanje spuštanja
     if (glfwGetKey(m_window.getHandle(), GLFW_KEY_SPACE) == GLFW_PRESS)
-        m_dropping = true;
+    {
+        if (!m_dropping && !m_returning)
+        {
+            m_dropping = true;
+        }
+    }
 
+    // spuštanje
     if (m_dropping)
     {
         m_clawRoot->transform.position.y -= m_dropSpeed * dt;
 
-        if (m_clawRoot->transform.position.y <= 0.3f)
+        if (m_clawRoot->transform.position.y <= minY)
+        {
+            m_clawRoot->transform.position.y = minY;
             m_dropping = false;
+            m_returning = true;
+        }
+    }
+
+    // vraćanje gore
+    if (m_returning)
+    {
+        m_clawRoot->transform.position.y += m_dropSpeed * dt;
+
+        if (m_clawRoot->transform.position.y >= startY)
+        {
+            m_clawRoot->transform.position.y = startY;
+            m_returning = false;
+        }
+    }
+
+    // ===== TOGGLE POGLED (premesteno na desni klik da ne kolidira sa "coin") =====
+    if (glfwGetMouseButton(m_window.getHandle(), GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS)
+    {
+        if (!m_mousePressed)
+        {
+            m_mousePressed = true;
+            m_closeView = !m_closeView;
+
+            if (m_closeView)
+                m_camera->setDistance(7.5f);
+            else
+                m_camera->setDistance(12.0f);
+        }
     }
     else
     {
-        if (m_clawRoot->transform.position.y < 1.5f)
-            m_clawRoot->transform.position.y += m_dropSpeed * dt;
+        m_mousePressed = false;
+    }
+
+    // DEPTH toggle
+    if (glfwGetKey(m_window.getHandle(), GLFW_KEY_1) == GLFW_PRESS)
+    {
+        if (!m_dPressed)
+        {
+            m_dPressed = true;
+            m_depthEnabled = !m_depthEnabled;
+
+            if (m_depthEnabled)
+                glEnable(GL_DEPTH_TEST);
+            else
+                glDisable(GL_DEPTH_TEST);
+        }
+    }
+    else
+    {
+        m_dPressed = false;
+    }
+
+    // CULL toggle
+    if (glfwGetKey(m_window.getHandle(), GLFW_KEY_2) == GLFW_PRESS)
+    {
+        if (!m_cPressed)
+        {
+            m_cPressed = true;
+            m_cullEnabled = !m_cullEnabled;
+
+            if (m_cullEnabled)
+            {
+                glEnable(GL_CULL_FACE);
+                glCullFace(GL_BACK);
+            }
+            else
+            {
+                glDisable(GL_CULL_FACE);
+            }
+        }
+    }
+    else
+    {
+        m_cPressed = false;
     }
 
 }
+
 
 void Application::render()
 {
@@ -381,14 +634,37 @@ void Application::render()
 
     glEnable(GL_DEPTH_TEST);
     glDisable(GL_BLEND);
-    // svetlo (minimalno za specifikaciju)
+    // ===== LAMP = svetlo na sceni =====
+    glm::vec3 lampColor{ 0.0f };
+    switch (m_lampMode)
+    {
+    case LampMode::Off:
+        lampColor = { 1.0f, 1.0f, 1.0f };
+        break;
+    case LampMode::Blue:
+        lampColor = { 0.1f, 0.35f, 1.0f };
+        break;
+    case LampMode::WinBlink:
+        lampColor = m_lampBlinkGreen ? glm::vec3(0.1f, 1.0f, 0.2f) : glm::vec3(1.0f, 0.15f, 0.15f);
+        break;
+    }
+
+    if (m_lamp)
+    {
+        m_lamp->color = lampColor;
+        m_lightPos = m_lamp->transform.position;
+    }
+    m_lightColor = lampColor;
+
     m_shader->use();
     m_shader->setVec3("u_LightPos", m_lightPos);
     m_shader->setVec3("u_LightColor", m_lightColor);
-    m_shader->setVec3("u_ViewPos", glm::vec3(0.0f, 0.0f, 0.0f)); // ako Camera nema poziciju, privremeno
+    m_shader->setVec3("u_AmbientColor", m_ambientColor);
+    m_shader->setFloat("u_AmbientStrength", m_ambientStrength);
+    m_shader->setVec3("u_ViewPos", m_camera->getPosition());
     m_shader->setFloat("u_Shininess", 32.0f);
 
-    
+
     // prvo crtamo sve cvrste objekte
     m_shader->use();
     m_shader->setFloat("u_Alpha", 1.0f);
@@ -423,6 +699,8 @@ void Application::shutdown()
     delete m_shader;  m_shader = nullptr;
 
     delete m_cubeMesh; m_cubeMesh = nullptr;
+
+    delete m_sphereMesh; m_sphereMesh = nullptr;
 
     delete m_watermarkShader;
     m_watermarkShader = nullptr;

@@ -9,6 +9,8 @@ uniform vec3 u_ObjectColor;
 
 uniform vec3 u_LightPos;
 uniform vec3 u_LightColor;
+uniform vec3 u_AmbientColor;
+uniform float u_AmbientStrength;
 uniform vec3 u_ViewPos;
 
 uniform float u_Shininess; // npr 32.0
@@ -20,8 +22,8 @@ void main()
     vec3 N = normalize(v_Normal);
     vec3 L = normalize(u_LightPos - v_FragPos);
 
-    // ambient
-    vec3 ambient = 0.15 * u_LightColor;
+    // ambient (odvojen od lampice, da scena nikad ne bude potpuno crna)
+    vec3 ambient = u_AmbientStrength * u_AmbientColor;
 
     // diffuse
     float diff = max(dot(N, L), 0.0);

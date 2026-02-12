@@ -32,7 +32,29 @@ glm::mat4 Camera::getView() const
     return glm::lookAt(position, m_target, { 0,1,0 });
 }
 
+glm::vec3 Camera::getPosition() const
+{
+    float rad = glm::radians(m_yaw);
+
+    glm::vec3 position;
+    position.x = sin(rad) * m_distance;
+    position.z = cos(rad) * m_distance;
+    position.y = 3.0f;
+
+    return position;
+}
+
 glm::mat4 Camera::getProjection() const
 {
     return glm::perspective(glm::radians(m_fov), m_aspect, m_near, m_far);
+}
+
+void Camera::setDistance(float d)
+{
+    m_distance = d;
+}
+
+float Camera::getDistance() const
+{
+    return m_distance;
 }

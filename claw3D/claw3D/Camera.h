@@ -12,6 +12,9 @@ public:
 
     glm::mat4 getView() const;
     glm::mat4 getProjection() const;
+    glm::vec3 getPosition() const;
+    void setDistance(float d);
+    float getDistance() const;
 
 private:
     float m_fov;
@@ -20,7 +23,7 @@ private:
     float m_far;
 
     float m_yaw = 0.0f;
-    float m_distance = 8.0f;
+    float m_distance = 12.0f;
 
     glm::vec3 m_target = { 0.0f, 0.5f, 0.0f };
 };
