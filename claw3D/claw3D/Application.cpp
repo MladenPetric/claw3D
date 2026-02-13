@@ -20,9 +20,7 @@
 #include <vector>
 
 
-// === Shared cube geometry ===
 static float cubeVertices[] = {
-    // pos                 // normal
     // FRONT (0,0,1)
     -0.5f,-0.5f, 0.5f,   0,0,1,
      0.5f,-0.5f, 0.5f,   0,0,1,
@@ -384,10 +382,8 @@ void Application::init()
 
 
     m_clawRoot = clawRoot;
-    // Tačka hvatanja je ispod ClawRoot-a; koristi se i za koliziju sa igračkama i za limit spuštanja.
     m_grabOffset = { 0.0f, m_clawGrabLocalY, 0.0f };
-    // Ne dozvoli da tačka hvatanja ode ispod poda u staklu
-    m_clawMinY = m_floorY - m_clawGrabLocalY; // jer (clawRoot.y + grabY) == floorY
+    m_clawMinY = m_floorY - m_clawGrabLocalY; 
 
     // =====================
     // 4. RUPA ZA ŽETON (NA PREDNJEM PANELU)
@@ -401,10 +397,10 @@ void Application::init()
 
 
     // =====================
-// 5. POLUGA (IZLAZI IZ PREDNJE STRANE BAZE)
-// =====================
+    // 5. POLUGA (IZLAZI IZ PREDNJE STRANE BAZE)
+    // =====================
 
-// pozicija prednje strane baze
+    // pozicija prednje strane baze
     float frontZ = baseDepth / 2.0f;
 
     auto* leverRod = m_scene->createObject(m_cubeMesh, "LeverRod");
@@ -548,7 +544,7 @@ void Application::update(float dt)
         return;
     }
 
-    // ===== PRIZE BLINK -> klik na osvojenu igračku da nestane =====
+    // ===== PRIZE BLINK - klik na osvojenu igračku da nestane =====
     if (m_state == GameState::PrizeBlink)
     {
         m_lampMode = LampMode::WinBlink;
@@ -566,7 +562,6 @@ void Application::update(float dt)
 
         if (lmbClick && canPlayNow && m_prizeToy)
         {
-            // “nestane”: skloni je ispod scene i deaktiviraj
             m_prizeToy->active = false;
 
             m_prizeToy = nullptr;
@@ -581,7 +576,6 @@ void Application::update(float dt)
             return;
         }
 
-        // u prize stanju nema kontrole kandže
         return;
     }
 
