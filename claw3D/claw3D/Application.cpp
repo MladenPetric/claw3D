@@ -77,7 +77,7 @@ static bool isFrontPlayable(const glm::vec3& camPos, bool closeView)
 {
 
     if (!closeView) return false;
-    return camPos.z > 3.0f; 
+    return camPos.z > 3.0f;
 }
 
 static bool pointInHoleXZ(const glm::vec3& p, const glm::vec3& holeCenter, const glm::vec2& halfSize)
@@ -228,6 +228,9 @@ void Application::init()
     float holeWidth = 1.2f;
     float holeHeight = 0.9f;
     float wallThickness = 0.3f;
+    // Centar rupe (X,Z) u podu stakla: rupa je ostavljena na prednjem delu (dužine holeWidth).
+    m_holeCenter = { 0.0f, m_floorY, (baseDepth * 0.5f) - (holeWidth * 0.5f) };
+    m_holeHalfSize = { holeWidth * 0.5f, holeWidth * 0.5f }; // (x,z) polovine dimenzija otvora
 
     // LEVA STRANA
     auto* baseLeft = m_scene->createObject(m_cubeMesh, "BaseLeft");
@@ -381,6 +384,10 @@ void Application::init()
 
 
     m_clawRoot = clawRoot;
+    // Tačka hvatanja je ispod ClawRoot-a; koristi se i za koliziju sa igračkama i za limit spuštanja.
+    m_grabOffset = { 0.0f, m_clawGrabLocalY, 0.0f };
+    // Ne dozvoli da tačka hvatanja ode ispod poda u staklu
+    m_clawMinY = m_floorY - m_clawGrabLocalY; // jer (clawRoot.y + grabY) == floorY
 
     // =====================
     // 4. RUPA ZA ŽETON (NA PREDNJEM PANELU)
@@ -415,7 +422,7 @@ void Application::init()
     leverHead->transform.position = {
         1.6f,
         -1.2f,
-        frontZ + 0.65f  
+        frontZ + 0.65f
     };
     leverHead->color = { 0.9f, 0.1f, 0.1f };
 
@@ -475,7 +482,7 @@ void Application::update(float dt)
     static bool backDown = false;
 
     static bool lmbPressed = false;
-// ===== TOGGLE POGLED=====
+    // ===== TOGGLE POGLED=====
     if (glfwGetMouseButton(m_window.getHandle(), GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS)
     {
         if (!m_mousePressed)
@@ -515,7 +522,7 @@ void Application::update(float dt)
     // ===== VIEW GATE =====
     bool canPlayNow = isFrontPlayable(m_camera->getPosition(), m_closeView);
 
-   // ===== OFF -> klik coin slot =====
+    // ===== OFF -> klik coin slot =====
     if (m_state == GameState::Off)
     {
         m_lampMode = LampMode::Off;
@@ -545,6 +552,17 @@ void Application::update(float dt)
     if (m_state == GameState::PrizeBlink)
     {
         m_lampMode = LampMode::WinBlink;
+        // ===== LAMP BLINK TIMER =====
+        if (m_lampMode == LampMode::WinBlink)
+        {
+            m_lampBlinkTimer += dt;
+
+            if (m_lampBlinkTimer >= 0.5f)
+            {
+                m_lampBlinkTimer = 0.0f;
+                m_lampBlinkGreen = !m_lampBlinkGreen;
+            }
+        }
 
         if (lmbClick && canPlayNow && m_prizeToy)
         {
@@ -633,11 +651,13 @@ void Application::update(float dt)
             float distXZ = sqrt(dx * dx + dz * dz);
 
             if (distXZ <= m_grabRadius &&
-                std::abs(clawPos.y - tp.y) <= 0.25f)
+                std::abs((clawPos.y + m_grabOffset.y) - tp.y) <= 0.25f)
             {
                 m_grabbedToy = toy;
                 m_state = GameState::Returning;
                 setClawOpen(false);
+                // odmah je postavi u tačku hvatanja da ne "odleti" ka ClawRoot centru
+                m_grabbedToy->transform.position = m_clawRoot->transform.position + m_grabOffset;
                 break;
             }
         }
@@ -684,8 +704,10 @@ void Application::update(float dt)
 
         glm::vec3 p = m_grabbedToy->transform.position;
 
-        if (pointInHoleXZ(p, m_holeCenter, m_holeHalfSize) && p.y < (m_floorY - 0.1f))
+        bool inHole = pointInHoleXZ(p, m_holeCenter, m_holeHalfSize);
+        if (inHole && p.y <= m_floorY)
         {
+            // Ušla je u fizički otvor → teleport u pregradu za nagradu i prebaci stanje
             m_grabbedToy->transform.position = m_prizePos;
 
             m_prizeToy = m_grabbedToy;
@@ -697,10 +719,18 @@ void Application::update(float dt)
 
             m_state = GameState::PrizeBlink;
         }
-        else if (p.y <= m_floorY)
+        else if (!inHole && p.y <= m_floorY)
         {
-            // udar u dno
-            p.y = m_floorY;
+            float halfH = 0.2f;
+
+            if (m_grabbedToy == m_teddyObj)
+                halfH = m_teddyHalfHeight;
+            else if (m_grabbedToy == m_sheepObj)
+                halfH = m_sheepHalfHeight;
+
+            p.y = m_floorY + halfH;
+
+          
             m_grabbedToy->transform.position = p;
 
             m_toyVelocity = glm::vec3(0.0f);
@@ -709,7 +739,7 @@ void Application::update(float dt)
         }
     }
 
-    
+
     // DEPTH toggle
     if (glfwGetKey(m_window.getHandle(), GLFW_KEY_1) == GLFW_PRESS)
     {
@@ -759,13 +789,22 @@ void Application::setClawOpen(bool open)
 {
     m_clawOpen = open;
 
-    float rot = open ? -40.0f : 10.0f;
-
-
+    // Vizuelno: otvorena = šire i više "rascvetana", zatvorena = skupljena ka centru
+    float pitch = open ? -60.0f : -15.0f;   // nagib prstiju
+    float radius = open ? 0.55f : 0.22f;   // udaljenost prstiju od centra
 
     for (GameObject* finger : m_fingers)
     {
-        finger->transform.rotation.x = rot;
+        if (!finger) continue;
+
+        float yawDeg = finger->transform.rotation.y;          // već postavljen u init
+        float a = glm::radians(yawDeg);
+
+        finger->transform.position.x = cos(a) * radius;
+        finger->transform.position.z = sin(a) * radius;
+        finger->transform.position.y = -0.4f;
+
+        finger->transform.rotation.x = pitch;
     }
 }
 

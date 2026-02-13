@@ -103,6 +103,9 @@ private:
     float m_floorY = -0.6f;               // "dno kutije" za igračke
     float m_grabRadius = 0.35f;           // hvatanje igračke 
 
+
+    // Y offset (u prostoru ClawRoot-a) gde je tačka hvatanja (približno vrh kandže)
+    float m_clawGrabLocalY = -2.2f;
     glm::vec3 m_holeCenter{ 0.0f, -0.6f, 1.0f };
     glm::vec2 m_holeHalfSize{ 0.6f, 0.5f };
 
@@ -112,11 +115,13 @@ private:
 
 
     void setClawOpen(bool open);
-	void updateCursor();
+    void updateCursor();
     bool m_clawOpen = true;
 
-    glm::vec3 m_grabOffset{ 0.0f, -0.4f, 0.0f };
+    glm::vec3 m_grabOffset{ 0.0f, -2.2f, 0.0f };
 
+    float m_teddyHalfHeight = 0.18f;  // fino podešavanje
+    float m_sheepHalfHeight = 0.35f;  // prilagodi po potrebi
 
 
 
