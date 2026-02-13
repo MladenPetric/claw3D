@@ -13,12 +13,10 @@ GameObject* Scene::createObject(Mesh* mesh, const std::string& name)
 
 void Scene::update(float)
 {
-    // kasnije: state machine, animacije, collision, itd.
 }
 
 void Scene::draw(const Shader& shader, const Camera& camera)
 {
-    // prvo solid
     for (auto& obj : m_objects)
     {
         if (!obj->transparent)
@@ -28,7 +26,6 @@ void Scene::draw(const Shader& shader, const Camera& camera)
         }
     }
 
-    // onda transparent
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 

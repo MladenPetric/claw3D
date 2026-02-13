@@ -26,11 +26,9 @@ bool Window::create(int width, int height, const char* title)
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    // Uzimamo primarni monitor
     GLFWmonitor* monitor = glfwGetPrimaryMonitor();
     const GLFWvidmode* mode = glfwGetVideoMode(monitor);
 
-    // Kreiranje FULLSCREEN prozora
     m_window = glfwCreateWindow(
         mode->width,
         mode->height,
@@ -54,10 +52,8 @@ bool Window::create(int width, int height, const char* title)
         return false;
     }
 
-    // Viewport na celu rezoluciju ekrana
     glViewport(0, 0, mode->width, mode->height);
 
-    // Isključi VSync jer imaš svoj frame limiter
     glfwSwapInterval(0);
 
     return true;

@@ -72,10 +72,23 @@ static float cubeVertices[] = {
       0.5f,-0.5f,-0.5f,   0,-1,0,
 };
 
-// === Simple UV-less sphere (triangles) ===
+
+static bool isFrontPlayable(const glm::vec3& camPos, bool closeView)
+{
+
+    if (!closeView) return false;
+    return camPos.z > 3.0f; 
+}
+
+static bool pointInHoleXZ(const glm::vec3& p, const glm::vec3& holeCenter, const glm::vec2& halfSize)
+{
+    return (std::abs(p.x - holeCenter.x) <= halfSize.x) &&
+        (std::abs(p.z - holeCenter.z) <= halfSize.y);
+}
+
+
 static std::vector<float> buildSphereVertices(int stacks, int slices)
 {
-    // vertices: pos(3) + normal(3)
     std::vector<float> v;
     v.reserve(stacks * slices * 6 * 6);
 
@@ -105,7 +118,6 @@ static std::vector<float> buildSphereVertices(int stacks, int slices)
             glm::vec3 p01 = { cos(phi0) * cos(th1), sin(phi0), cos(phi0) * sin(th1) };
             glm::vec3 p11 = { cos(phi1) * cos(th1), sin(phi1), cos(phi1) * sin(th1) };
 
-            // 2 triangles
             push(p00); push(p10); push(p11);
             push(p00); push(p11); push(p01);
         }
@@ -171,6 +183,34 @@ void Application::init()
     m_scene = new Scene();
 
     m_cubeMesh = new Mesh(cubeVertices, 36);
+
+    // ===== TEDDY OBJ + TEXTURE =====
+    Mesh* teddyMesh = new Mesh(std::string("models/Teddy.obj"));
+    m_teddyObj = m_scene->createObject(teddyMesh, "Teddy");
+    m_teddyObj->transform.scale = { 0.15f, 0.15f, 0.15f };
+    m_teddyObj->transform.position = { 0.0f, -0.4f, 0.0f };
+    m_teddyObj->texture = loadImageToTexture("models/Teddy.png");
+    m_teddyObj->useTexture = true;
+    m_toys.push_back(m_teddyObj);
+
+    m_coinCursor = loadImageToCursor("Resources/handCursor.png");
+    m_leverCursor = loadImageToCursor("Resources/lever.png");
+
+    // početno stanje – automat isključen → žeton
+    glfwSetCursor(m_window.getHandle(), m_coinCursor);
+    m_machineOn = false;
+
+
+    // ===== SHEEP OBJ + TEXTURE =====
+    Mesh* sheepMesh = new Mesh(std::string("models/Sheep.obj"));
+    m_sheepObj = m_scene->createObject(sheepMesh, "Sheep");
+    m_sheepObj->transform.scale = { 0.7f, 0.7f, 0.7f };
+    m_sheepObj->transform.position = { 1.0f, -0.5f, 0.8f };
+    m_sheepObj->texture = loadImageToTexture("models/Sheep.png");
+    m_sheepObj->useTexture = true;
+    m_toys.push_back(m_sheepObj);
+
+
 
     // Sphere mesh (lamp)
     {
@@ -335,24 +375,12 @@ void Application::init()
         finger->color = { 0.8f, 0.8f, 0.8f };
 
         clawHead->addChild(finger);
-    }
+        m_fingers.push_back(finger);
 
+    }
 
 
     m_clawRoot = clawRoot;
-
-
-    for (int i = 0; i < 3; i++)
-    {
-        auto* toy = m_scene->createObject(m_cubeMesh, "Toy");
-        toy->transform.scale = { 0.4f, 0.4f, 0.4f };
-        toy->transform.position = {
-            -0.6f + i * 0.6f,
-            -0.6f,
-            0.0f
-        };
-        toy->color = { 0.6f + 0.1f * i, 0.3f, 0.2f };
-    }
 
     // =====================
     // 4. RUPA ZA ŽETON (NA PREDNJEM PANELU)
@@ -362,6 +390,7 @@ void Application::init()
     coinSlot->transform.position = { 1.0f, -1.0f, 2.25f };
     coinSlot->color = { 0.8f, 0.1f, 0.1f };
 
+    m_coinSlotObj = coinSlot;
 
 
     // =====================
@@ -371,7 +400,6 @@ void Application::init()
 // pozicija prednje strane baze
     float frontZ = baseDepth / 2.0f;
 
-    // ROD – ide iz baze ka napolje (po Z osi)
     auto* leverRod = m_scene->createObject(m_cubeMesh, "LeverRod");
     leverRod->transform.scale = { 0.12f, 0.12f, 0.6f };   // izdužena po Z
     leverRod->transform.position = {
@@ -382,13 +410,12 @@ void Application::init()
     leverRod->color = { 0.15f, 0.15f, 0.15f };
 
 
-    // HEAD – dugme koje je najbliže kameri
     auto* leverHead = m_scene->createObject(m_cubeMesh, "LeverHead");
     leverHead->transform.scale = { 0.35f, 0.35f, 0.35f };
     leverHead->transform.position = {
         1.6f,
         -1.2f,
-        frontZ + 0.65f   // još malo napolje
+        frontZ + 0.65f  
     };
     leverHead->color = { 0.9f, 0.1f, 0.1f };
 
@@ -443,126 +470,12 @@ void Application::update(float dt)
     m_camera->processInput(m_window.getHandle(), dt);
     m_scene->update(dt);
 
-    // ===== LAMP STATE (minimalna implementacija bez collision-a) =====
-    // - LMB: "coin" -> plava (režim igre)
-    // - ENTER: "win" -> blink crveno/zeleno na 0.5s
-    // - BACKSPACE: reset -> ugašena
     static bool lmbDown = false;
     static bool enterDown = false;
     static bool backDown = false;
 
-    if (glfwGetMouseButton(m_window.getHandle(), GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
-    {
-        if (!lmbDown)
-        {
-            lmbDown = true;
-            m_lampMode = LampMode::Blue;
-            m_lampBlinkTimer = 0.0f;
-        }
-    }
-    else lmbDown = false;
-
-    if (glfwGetKey(m_window.getHandle(), GLFW_KEY_ENTER) == GLFW_PRESS)
-    {
-        if (!enterDown)
-        {
-            enterDown = true;
-            m_lampMode = LampMode::WinBlink;
-            m_lampBlinkTimer = 0.0f;
-            m_lampBlinkGreen = true;
-        }
-    }
-    else enterDown = false;
-
-    if (glfwGetKey(m_window.getHandle(), GLFW_KEY_BACKSPACE) == GLFW_PRESS)
-    {
-        if (!backDown)
-        {
-            backDown = true;
-            m_lampMode = LampMode::Off;
-            m_lampBlinkTimer = 0.0f;
-        }
-    }
-    else backDown = false;
-
-    if (m_lampMode == LampMode::WinBlink)
-    {
-        m_lampBlinkTimer += dt;
-        if (m_lampBlinkTimer >= 0.5f)
-        {
-            m_lampBlinkTimer = 0.0f;
-            m_lampBlinkGreen = !m_lampBlinkGreen;
-        }
-    }
-
-    float move = m_clawSpeed * dt;
-
-    // gasenje
-    if (glfwGetKey(m_window.getHandle(), GLFW_KEY_ESCAPE) == GLFW_PRESS)
-    {
-        glfwSetWindowShouldClose(m_window.getHandle(), true);
-    }
-
-    // horizontalno kretanje
-    if (glfwGetKey(m_window.getHandle(), GLFW_KEY_A) == GLFW_PRESS)
-        m_clawRoot->transform.position.x -= move;
-
-    if (glfwGetKey(m_window.getHandle(), GLFW_KEY_D) == GLFW_PRESS)
-        m_clawRoot->transform.position.x += move;
-
-    if (glfwGetKey(m_window.getHandle(), GLFW_KEY_W) == GLFW_PRESS)
-        m_clawRoot->transform.position.z -= move;
-
-    if (glfwGetKey(m_window.getHandle(), GLFW_KEY_S) == GLFW_PRESS)
-        m_clawRoot->transform.position.z += move;
-
-    // clamp unutar kutije
-    m_clawRoot->transform.position.x =
-        glm::clamp(m_clawRoot->transform.position.x, -1.5f, 1.5f);
-
-    m_clawRoot->transform.position.z =
-        glm::clamp(m_clawRoot->transform.position.z, -1.8f, 1.8f);
-
-    // ===== DROP LOGIKA =====
-
-    const float startY = 2.5f;   // početna visina
-    const float minY = 1.6f;   // visina blizu poda 
-
-    // pokretanje spuštanja
-    if (glfwGetKey(m_window.getHandle(), GLFW_KEY_SPACE) == GLFW_PRESS)
-    {
-        if (!m_dropping && !m_returning)
-        {
-            m_dropping = true;
-        }
-    }
-
-    // spuštanje
-    if (m_dropping)
-    {
-        m_clawRoot->transform.position.y -= m_dropSpeed * dt;
-
-        if (m_clawRoot->transform.position.y <= minY)
-        {
-            m_clawRoot->transform.position.y = minY;
-            m_dropping = false;
-            m_returning = true;
-        }
-    }
-
-    // vraćanje gore
-    if (m_returning)
-    {
-        m_clawRoot->transform.position.y += m_dropSpeed * dt;
-
-        if (m_clawRoot->transform.position.y >= startY)
-        {
-            m_clawRoot->transform.position.y = startY;
-            m_returning = false;
-        }
-    }
-
-    // ===== TOGGLE POGLED (premesteno na desni klik da ne kolidira sa "coin") =====
+    static bool lmbPressed = false;
+// ===== TOGGLE POGLED=====
     if (glfwGetMouseButton(m_window.getHandle(), GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS)
     {
         if (!m_mousePressed)
@@ -581,6 +494,222 @@ void Application::update(float dt)
         m_mousePressed = false;
     }
 
+
+    float move = m_clawSpeed * dt;
+
+    // gasenje
+    if (glfwGetKey(m_window.getHandle(), GLFW_KEY_ESCAPE) == GLFW_PRESS)
+    {
+        glfwSetWindowShouldClose(m_window.getHandle(), true);
+    }
+
+    // ===== INPUT EDGES =====
+    bool lmbNow = glfwGetMouseButton(m_window.getHandle(), GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
+    bool lmbClick = lmbNow && !m_lmbDown;
+    m_lmbDown = lmbNow;
+
+    bool spaceNow = glfwGetKey(m_window.getHandle(), GLFW_KEY_SPACE) == GLFW_PRESS;
+    bool spacePress = spaceNow && !m_spaceDown;
+    m_spaceDown = spaceNow;
+
+    // ===== VIEW GATE =====
+    bool canPlayNow = isFrontPlayable(m_camera->getPosition(), m_closeView);
+
+   // ===== OFF -> klik coin slot =====
+    if (m_state == GameState::Off)
+    {
+        m_lampMode = LampMode::Off;
+
+        if (lmbClick && canPlayNow)
+        {
+            m_state = GameState::Playing;
+            m_machineOn = true;
+
+            m_lampMode = LampMode::Blue;
+
+            m_clawRoot->transform.position.y = m_clawStartY;
+            m_dropping = false;
+            m_returning = false;
+
+            m_grabbedToy = nullptr;
+            m_prizeToy = nullptr;
+
+            setClawOpen(true);
+        }
+
+        updateCursor();
+        return;
+    }
+
+    // ===== PRIZE BLINK -> klik na osvojenu igračku da nestane =====
+    if (m_state == GameState::PrizeBlink)
+    {
+        m_lampMode = LampMode::WinBlink;
+
+        if (lmbClick && canPlayNow && m_prizeToy)
+        {
+            // “nestane”: skloni je ispod scene i deaktiviraj
+            m_prizeToy->active = false;
+
+            m_prizeToy = nullptr;
+            m_grabbedToy = nullptr;
+            m_machineOn = false;
+
+            m_lampMode = LampMode::Off;
+            m_state = GameState::Off;
+            m_machineOn = false;
+            setClawOpen(true);
+
+            return;
+        }
+
+        // u prize stanju nema kontrole kandže
+        return;
+    }
+
+    /*float move = m_clawSpeed * dt;*/
+
+    if (canPlayNow && (m_state == GameState::Playing || m_state == GameState::Carrying))
+    {
+
+        if (glfwGetKey(m_window.getHandle(), GLFW_KEY_A) == GLFW_PRESS)
+            m_clawRoot->transform.position.x -= move;
+
+        if (glfwGetKey(m_window.getHandle(), GLFW_KEY_D) == GLFW_PRESS)
+            m_clawRoot->transform.position.x += move;
+
+        if (glfwGetKey(m_window.getHandle(), GLFW_KEY_W) == GLFW_PRESS)
+            m_clawRoot->transform.position.z -= move;
+
+        if (glfwGetKey(m_window.getHandle(), GLFW_KEY_S) == GLFW_PRESS)
+            m_clawRoot->transform.position.z += move;
+
+        m_clawRoot->transform.position.x = glm::clamp(m_clawRoot->transform.position.x, -1.5f, 1.5f);
+        m_clawRoot->transform.position.z = glm::clamp(m_clawRoot->transform.position.z, -1.8f, 1.8f);
+        if (m_state == GameState::Carrying && m_grabbedToy)
+        {
+            m_grabbedToy->transform.position =
+                m_clawRoot->transform.position + m_grabOffset;
+        }
+    }
+
+    // ===== SPACE BEHAVIOR =====
+    if (spacePress && canPlayNow)
+    {
+        // ako nosi igračku - ispusti
+        if (m_state == GameState::Carrying && m_grabbedToy)
+        {
+            m_state = GameState::ToyFalling;
+            m_toyVelocity = glm::vec3(0.0f); // start padanja
+            setClawOpen(true);
+
+        }
+        // ako ne nosi i nije već u drop animaciji - kreni da spušta
+        else if (m_state == GameState::Playing)
+        {
+            m_state = GameState::Dropping;
+            setClawOpen(true);   // prvo otvorena
+        }
+    }
+
+    glm::vec3 clawPos = m_clawRoot->transform.position;
+
+    // ===== DROPPING =====
+    if (m_state == GameState::Dropping)
+    {
+        // SPUŠTAJ KANDZU
+        m_clawRoot->transform.position.y -= m_dropSpeed * dt;
+
+        glm::vec3 clawPos = m_clawRoot->transform.position;
+
+        for (GameObject* toy : m_toys)
+        {
+            if (!toy || !toy->active) continue;
+
+            glm::vec3 tp = toy->transform.position;
+
+            float dx = tp.x - clawPos.x;
+            float dz = tp.z - clawPos.z;
+            float distXZ = sqrt(dx * dx + dz * dz);
+
+            if (distXZ <= m_grabRadius &&
+                std::abs(clawPos.y - tp.y) <= 0.25f)
+            {
+                m_grabbedToy = toy;
+                m_state = GameState::Returning;
+                setClawOpen(false);
+                break;
+            }
+        }
+
+        // DOTAKLA DNO
+        if (m_clawRoot->transform.position.y <= m_clawMinY)
+        {
+            m_clawRoot->transform.position.y = m_clawMinY;
+            m_state = GameState::Returning;
+        }
+    }
+
+
+    // ===== RETURNING =====
+    if (m_state == GameState::Returning)
+    {
+        m_clawRoot->transform.position.y += m_dropSpeed * dt;
+
+        // ako nosi igračku, neka ide sa kandzom
+        if (m_grabbedToy)
+        {
+            m_grabbedToy->transform.position =
+                m_clawRoot->transform.position + m_grabOffset;
+        }
+
+
+        if (m_clawRoot->transform.position.y >= m_clawStartY)
+        {
+            m_clawRoot->transform.position.y = m_clawStartY;
+
+            if (m_grabbedToy)
+                m_state = GameState::Carrying;
+            else
+                m_state = GameState::Playing;
+        }
+    }
+
+    // ===== PADANNJE IGRACKE =====
+    if (m_state == GameState::ToyFalling && m_grabbedToy)
+    {
+        m_toyVelocity.y -= 9.8f * dt;
+
+        m_grabbedToy->transform.position += m_toyVelocity * dt;
+
+        glm::vec3 p = m_grabbedToy->transform.position;
+
+        if (pointInHoleXZ(p, m_holeCenter, m_holeHalfSize) && p.y < (m_floorY - 0.1f))
+        {
+            m_grabbedToy->transform.position = m_prizePos;
+
+            m_prizeToy = m_grabbedToy;
+            m_grabbedToy = nullptr;
+
+            m_lampMode = LampMode::WinBlink;
+            m_lampBlinkTimer = 0.0f;
+            m_lampBlinkGreen = true;
+
+            m_state = GameState::PrizeBlink;
+        }
+        else if (p.y <= m_floorY)
+        {
+            // udar u dno
+            p.y = m_floorY;
+            m_grabbedToy->transform.position = p;
+
+            m_toyVelocity = glm::vec3(0.0f);
+            m_state = GameState::Playing;
+            m_grabbedToy = nullptr;
+        }
+    }
+
+    
     // DEPTH toggle
     if (glfwGetKey(m_window.getHandle(), GLFW_KEY_1) == GLFW_PRESS)
     {
@@ -623,9 +752,28 @@ void Application::update(float dt)
     {
         m_cPressed = false;
     }
+    updateCursor();
 
 }
+void Application::setClawOpen(bool open)
+{
+    m_clawOpen = open;
 
+    float rot = open ? -40.0f : 10.0f;
+
+
+
+    for (GameObject* finger : m_fingers)
+    {
+        finger->transform.rotation.x = rot;
+    }
+}
+
+void Application::updateCursor()
+{
+    if (m_state == GameState::Off) glfwSetCursor(m_window.getHandle(), m_coinCursor);
+    else                           glfwSetCursor(m_window.getHandle(), m_leverCursor);
+}
 
 void Application::render()
 {
@@ -665,7 +813,6 @@ void Application::render()
     m_shader->setFloat("u_Shininess", 32.0f);
 
 
-    // prvo crtamo sve cvrste objekte
     m_shader->use();
     m_shader->setFloat("u_Alpha", 1.0f);
 
@@ -707,5 +854,8 @@ void Application::shutdown()
 
     if (m_watermarkVBO) glDeleteBuffers(1, &m_watermarkVBO);
     if (m_watermarkVAO) glDeleteVertexArrays(1, &m_watermarkVAO);
+
+    if (m_coinCursor)  glfwDestroyCursor(m_coinCursor);
+    if (m_leverCursor) glfwDestroyCursor(m_leverCursor);
 
 }

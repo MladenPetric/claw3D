@@ -1,6 +1,6 @@
 #pragma once
 #include "Transform.h"
-#include <glm/glm.hpp>
+//#include <glm/glm.hpp>
 #include <string>
 #include <vector>
 
@@ -26,6 +26,8 @@ public:
     Transform transform;
     glm::vec3 color{ 1.0f, 0.0f, 0.0f };
 
+    unsigned int texture = 0;   // 0 = nema teksture
+    bool useTexture = false;
 private:
     Mesh* m_mesh = nullptr;
 

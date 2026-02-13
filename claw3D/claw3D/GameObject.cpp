@@ -1,3 +1,4 @@
+#include <glad/glad.h>
 #include "GameObject.h"
 #include "Mesh.h"
 #include "Shader.h"
@@ -37,5 +38,16 @@ void GameObject::draw(const Shader& shader, const Camera& camera) const
     shader.setMat4("u_Projection", proj);
 
     shader.setVec3("u_ObjectColor", color);
+
+    // tekstura
+    shader.setInt("u_UseTexture", (useTexture && texture != 0) ? 1 : 0);
+    if (useTexture && texture != 0)
+    {
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, texture);
+        shader.setInt("u_Texture", 0);
+    }
+
     m_mesh->draw();
 }
+
